@@ -301,7 +301,10 @@ void TM_SSD1306_DrawFilledCircle(int16_t x0, int16_t y0, int16_t r, SSD1306_COLO
 
 
 char CWM_SSD1306_Puts_Auto_newLine(char* str, TM_FontDef_t* Font, SSD1306_COLOR_t color) ;
-void CWM_ScreenClean(void);
+void TM_SSD1306_ScreenClean(void);
+
+void SSD1306_ON(void);
+void SSD1306_OFF(void);
 
 /**
  * @}

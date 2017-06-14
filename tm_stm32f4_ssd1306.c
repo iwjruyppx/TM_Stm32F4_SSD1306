@@ -153,8 +153,8 @@ char TM_SSD1306_Putc(char ch, TM_FontDef_t* Font, SSD1306_COLOR_t color) {
 	
 	/* Check available space in LCD */
 	if (
-		SSD1306_WIDTH <= (SSD1306.CurrentX + Font->FontWidth) ||
-		SSD1306_HEIGHT <= (SSD1306.CurrentY + Font->FontHeight)
+		SSD1306_WIDTH < (SSD1306.CurrentX + Font->FontWidth) ||
+		SSD1306_HEIGHT < (SSD1306.CurrentY + Font->FontHeight)
 	) {
 		/* Error */
 		return 0;
@@ -461,31 +461,80 @@ void TM_SSD1306_DrawFilledCircle(int16_t x0, int16_t y0, int16_t r, SSD1306_COLO
     }
 }
 
+
+static uint8_t CWM_BUFF_SHIFT(uint8_t hight, uint8_t low, uint8_t shift)
+{
+    uint16_t data;
+
+    data = ((uint16_t)hight << 8) | (uint16_t)low;
+    return (uint8_t)(data>> shift);
+}
+
+static void CWM_SET_SSD1306_SCREEN_MEMORY(int x, int y8, uint8_t data)
+{
+    SSD1306_Buffer[x + (y8 * SSD1306_WIDTH)] = data;
+}
+
+void CWM_SSD1306_SHIFT_PIXEL(int shift_y){
+    uint8_t data;
+    int shift_byte = shift_y / 8;
+    int shift_bit = shift_y % 8;
+    int x = 0, y = 0;
+
+    for(y=0;y<((SSD1306_HEIGHT/8) -shift_byte); y++){
+        for(x=0;x<SSD1306_WIDTH;x++){
+            data = CWM_BUFF_SHIFT( SSD1306_Buffer[x + ((y + 1 + shift_byte) * SSD1306_WIDTH)] ,SSD1306_Buffer[x + ((y + shift_byte) * SSD1306_WIDTH)], shift_bit);
+            CWM_SET_SSD1306_SCREEN_MEMORY( x, y, data);
+        }
+    }
+    if(shift_byte){
+        for(y = (SSD1306_HEIGHT/8)-1;y >((SSD1306_HEIGHT/8) -shift_byte -1);y-- ){
+            for(x=0;x<SSD1306_WIDTH;x++){
+                data = 0x00;
+                CWM_SET_SSD1306_SCREEN_MEMORY( x, y, data);
+            }
+        }
+    }
+    if(shift_bit){
+        y = ((SSD1306_HEIGHT/8) -shift_byte -1);
+        for(x=0;x<SSD1306_WIDTH;x++){
+            data = SSD1306_Buffer[x + ((y) * SSD1306_WIDTH)] & (0xff>>shift_bit);
+            CWM_SET_SSD1306_SCREEN_MEMORY( x, y, data);
+        }
+        
+    }
+}
+
 char CWM_SSD1306_Puts_Auto_newLine(char* str, TM_FontDef_t* Font, SSD1306_COLOR_t color) {
     char temp_c;
     /* Write characters */
     while (*str) {
+        if((SSD1306.CurrentX + Font->FontWidth) >= SSD1306_WIDTH){
+            SSD1306.CurrentX = 0;
+            SSD1306.CurrentY += Font->FontHeight;
+        }else if ((SSD1306.CurrentY + Font->FontHeight) > SSD1306_HEIGHT){
+            CWM_SSD1306_SHIFT_PIXEL(Font->FontHeight - (SSD1306_HEIGHT - SSD1306.CurrentY));
+            SSD1306.CurrentY -= (Font->FontHeight - (SSD1306_HEIGHT - SSD1306.CurrentY) );
+        }
     /* Write character by character */
         temp_c = TM_SSD1306_Putc(*str, Font, color);
         if (temp_c != *str) {
-            if((SSD1306.CurrentX + Font->FontWidth) >= SSD1306_WIDTH){
-                SSD1306.CurrentX = 0;
-                if((SSD1306.CurrentY + Font->FontHeight) >= SSD1306_HEIGHT)
-                    return *str;
-                SSD1306.CurrentY += Font->FontHeight;
-            }else if ((SSD1306.CurrentY + Font->FontHeight) >= SSD1306_HEIGHT)
-                    return *str;
         } else {
 		/* Increase string pointer */
 		str++;
+        }
+        if(str[0] == 0x0A){ // \n == ascii 0x0A  newline
+            str++;
+            SSD1306.CurrentX = 0;
+            SSD1306.CurrentY += Font->FontHeight;            
         }
     }
     /* Everything OK, zero should be returned */
     return *str;
 }
 
-void CWM_ScreenClean(void){
-    TM_SSD1306_Fill(0);
+void TM_SSD1306_ScreenClean(void){
+    TM_SSD1306_Fill(SSD1306_COLOR_BLACK);
     TM_SSD1306_GotoXY(0, 0);
 }
  
